@@ -1,5 +1,6 @@
 from src.process.WorkerProcess import WorkerProcess
 from src.log.Logger import Logger
+from src.process.TablesResult import TablesResult
 
 import json
 import shutil
@@ -24,6 +25,7 @@ if __name__ == "__main__":
     dir = config['instance']['dir']
     files = config['instance']['files']
     method = config['solver']['method']
+    seed = config['solver']['seed']
 
     if os.path.exists(f"{output}/logs"):
         shutil.rmtree(f"{output}/logs")
@@ -61,7 +63,10 @@ if __name__ == "__main__":
                 'timeLimit':timeLimitSolver
             })
 
-    WorkerProcess(workers,timeSupervisor,{'instancia': log,'dirLogs': f'{output}logs'}).process(instancies = instancies, solver= method)
+    WorkerProcess(workers,timeSupervisor,{'instancia': log,'dirLogs': f'{output}logs'}).process(instancies = instancies, solver= method, seed=seed)
+
+
+    # TablesResult.process(datas)
 
     '''
 Explored 11164 nodes (448772 simplex iterations) in 30.82 seconds (21.64 work units)

@@ -1,5 +1,5 @@
 #################################################################################################
-# Multi Product Prodction Routing Problem Greedy Constructive Heuristic
+# Multi Product Prodction Routing Problem Gras
 # Copyright 2024 Mateus Chacon
 
 # Este programa é um software livre, você pode redistribuí-lo e/ou modificá-lo
@@ -12,17 +12,12 @@
 # Veja a Licença Pública Geral GNU para mais detalhes
 #################################################################################################
 from src.log.Logger import Logger
-from typing import List
 from src.solvers.GreedyRandomizedConstructionRoute import GreedyRandomizedConstructionRoute as GR
-from src.helpers.ReadPrpFile import ReadPrpFile as RD
 from src.solvers.MultProductProdctionRoutingProblem import MultProductProdctionRoutingProblem as MPPRP
-import pdb
+from src.solvers.MultProductProdctionRoutingProblemGreedyConstructiveHeuristic import MultProductProdctionRoutingProblemGreedyConstructiveHeuristic as MPPRPG
 import numpy as np
-import math
-import json
 
-class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
-
+class MultProductProductionRoutingProblemGrasp:
     def __init__(self,map,dir,log:Logger,rng:np.random.Generator):
         self.data = map
         self.p=map['num_products']            ##Products  
@@ -60,7 +55,7 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
         self.solution={}
         self.mitStart = False
         self.solverGurobi = 0
-        self.rng = rng
+        self.rng=rng
 
     def setMitStart(self,mitStart):
         self.mitStart = mitStart
@@ -74,147 +69,23 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
     def setSeed(self,seed):
         self.seed = seed
 
-    def getDistancesInPeriod(self,candidates):
-        D = np.zeros((len(candidates), len(candidates)), dtype=float)
-        for i in range(len(candidates)):
-            for k in range(len(candidates)):
-                d = self.a_i_k[candidates[i]][candidates[k]]
-                D[i, k] = d
-                D[k, i] = d
-        return D
 
+    def solver(self,numThreads=None,timeLimit=None):
 
-    def construirSolucao(self):
-        solucao_t_i_p = [[[{'cliente': i,'produto': p,'periodo': t,'estoque': 0,'demanda': 0,'producaco': 0} for p in range(self.p)] for i in range(self.i)] for t in range(self.t)]
-        estoque_i_p = [[self.I_p_i_0[p][i] for p in range(self.p)] for i in range(self.i)]
-        capacities = [[self.C] for _ in range(self.v)]
-        routes = []
+        print("chegou aqui! seed", self.seed)
 
-        for t in range(self.t):
-            capacidade_producao_restante = int(self.B)
-            capacidade_veiculo_totais = [self.C*0.9 for _ in range(self.v)]
+        for alpha in np.linspace(0, 1, 111):
+            inst = MPPRPG(map=self.data,dir=self.dir,log=self.log,rng=self.rng)
+            inst.solver()
+            fo = inst.getValueObjectiveFunction()
 
-            # pdb.set_trace()
-            candidatos = []
-            veiculo_corrente=0
-            for i in range(1, self.i):
-                for p in range(self.p):
-                    demanda_t = self.d_p_i_t[p][i-1][t]
-                    qte = 0
+            print(f"alpha: {alpha} solucao: {fo}")
+            
 
-                    if(estoque_i_p[i][p] < demanda_t): 
-                        produto_faltante = demanda_t - estoque_i_p[i][p]
-                        disponibilidade_estoque = self.U_p_i[p][i] - estoque_i_p[i][p]
-                        qte = min(produto_faltante, capacidade_producao_restante, disponibilidade_estoque)
+        if(self.mitStart==True):
+            self.solverGurobi = MPPRP(self.data,self.dir,self.log,{"start":True, "variables":self.variables})
+            self.solverGurobi.solver(timeLimit=timeLimit,numThreads=numThreads)
 
-                        capacidade_producao_restante -=qte
-                        capacidade_veiculo_totais[veiculo_corrente] -= qte
-
-                        if(capacidade_veiculo_totais[veiculo_corrente] < 0):
-
-                            capacidade_veiculo_totais[veiculo_corrente] += qte
-
-                            veiculo_corrente+=1
-                            if(veiculo_corrente>=self.v):
-                                self.log.error("modelo Inviavel pelas restrições de capacidade do veiculo")
-
-                            capacidade_veiculo_totais[veiculo_corrente] -= qte
-
-                        if(capacidade_producao_restante<0):
-                            self.log.error("modelo Inviavel pelas restrições de produção")
-                            break
-
-
-                    estoque_i_p[i][p] += qte
-                    solucao_t_i_p[t][i][p]['producaco']+= qte
-                    solucao_t_i_p[t][i][p]['cliente'] = i
-                    solucao_t_i_p[t][i][p]['produto'] = p
-                    solucao_t_i_p[t][i][p]['periodo'] = t
-                    solucao_t_i_p[t][i][p]['estoque'] = estoque_i_p[i][p]
-                    solucao_t_i_p[t][i][p]['demanda'] = demanda_t
-                        
-                    if(estoque_i_p[i][p]<self.U_p_i[p][i] and capacidade_producao_restante > 0 and capacidade_veiculo_totais[veiculo_corrente] > 0):
-                        demanda_futura = sum(self.d_p_i_t[p][i-1][t+1:self.t])
-                        custo_unitario = self.s_p[p] + self.c_p[p] + self.h_p_i[p][i]*demanda_futura
-                        candidatos.append((i,p,'barato',1/custo_unitario))
-
-            candidatos.sort(key=lambda x: x[3], reverse=True)
-
-            iter=0
-            positivos = [v for v in capacidade_veiculo_totais if v > 0]
-            if positivos:
-                maior_valor = max(positivos)
-                veiculo_corrente = capacidade_veiculo_totais.index(maior_valor)
-
-            while ( (capacidade_producao_restante > 0 and len(candidatos)!=0 and capacidade_veiculo_totais[veiculo_corrente] > 0) and iter<=len(candidatos)):
-                top_k = math.ceil(self.alfa * len(candidatos))
-                RCL = candidatos[:top_k]
-                i,_,_,_ = self.rng.choice(RCL)
-                i = int(i)
-                total_p = []
-                for p in range(self.p):
-                    demanda_futura = sum(self.d_p_i_t[p][i-1][t+1:self.t])
-                    disponibilidade_estoque = self.U_p_i[p][i] - estoque_i_p[i][p]
-
-                    faltante = demanda_futura - estoque_i_p[i][p]
-                    if(faltante<0):
-                        faltante = 0
-
-                    total_p.append(min(capacidade_producao_restante, demanda_futura, disponibilidade_estoque, faltante, capacidade_veiculo_totais[veiculo_corrente]))
-
-
-                capacidade_producao_restante -= sum(total_p)
-                capacidade_veiculo_totais[veiculo_corrente] -= sum(total_p)
-
-                if(capacidade_producao_restante<0 or capacidade_veiculo_totais[veiculo_corrente]< 0 ):
-                    self.log.warning(f"Produção está negátiva: {capacidade_producao_restante} ou capcidade_veiculo negativo:{capacidade_veiculo_totais[veiculo_corrente]}")
-                    capacidade_producao_restante += sum(total_p)
-                    capacidade_veiculo_totais[veiculo_corrente] += sum(total_p)
-                    iter+=1
-                    positivos = [v for v in capacidade_veiculo_totais if v > 0]
-                    if positivos:
-                        maior_valor = max(positivos)
-                        veiculo_corrente = capacidade_veiculo_totais.index(maior_valor)
-                    
-                else:
-                    for p in range(len(total_p)):
-                        estoque_i_p[i][p] += total_p[p]
-                        solucao_t_i_p[t][i][p]['producaco']+= total_p[p]
-                        solucao_t_i_p[t][i][p]['cliente'] = i
-                        solucao_t_i_p[t][i][p]['produto'] = p
-                        solucao_t_i_p[t][i][p]['periodo'] = t
-                        solucao_t_i_p[t][i][p]['estoque'] = estoque_i_p[i][p]
-                        solucao_t_i_p[t][i][p]['demanda'] = self.d_p_i_t[p][i-1][t]
-                        candidatos = [c for c in candidatos if not (c[0]==i and c[1]==p)]
-
-            candidates_t = [0]  # 0 = depósito
-            dem_t = [[0.0] * self.p]  # vetor de produtos no depósito (zerado)
-
-            for i, linha in enumerate(solucao_t_i_p[t]):
-                prod = []
-                client_current = 0
-                for p, celula in enumerate(linha):
-                    prod.append(celula['producaco'])  # já é separado por produto
-                    estoque_i_p[i][p] = celula['estoque'] - celula['demanda']
-                    client_current = celula['cliente']
-
-                if any(q > 0 for q in prod):  # se tem algo produzido para o cliente
-                    candidates_t.append(client_current)
-                    dem_t.append(prod)  # agora vai com vetor por produto, não o somatório
-
-            # pdb.set_trace()
-            candidates_t = list(dict.fromkeys(candidates_t))
-            dem_t = [v for v in dem_t if v]
-            D = self.getDistancesInPeriod(candidates_t)
-
-            route, distance, demandas = self.greedyRoute.greedyRandomizedConstruction(candidates_t, dem_t, capacities, D, int(self.v), self.alfa, self.rng)
-            routes.append({'periodo':t ,'route':route,'distance':distance,'demandas':demandas})
-
-        self.solution= {
-            "production": solucao_t_i_p,
-            "routes": routes
-        }
-        #self.log.info(json.dumps(final_solution, indent=4))
 
     def convertVariables(self):
 
@@ -271,7 +142,6 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
         self.variables={"X":X, "Y":Y, "I":I, "Q":Q, "R":R, "Z":Z}
 
         return Z,X,Y,I,R,Q
-    
     def getResultsSolverHeurisct(self):
         z=self.variables["Z"]
         x=self.variables["X"]
@@ -398,97 +268,9 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
     
         return Z,X,Y,I,R,Q,0,0,0,0,0,0,0   
 
-    def solver(self,numThreads=None,timeLimit=None):
-        self.construirSolucao()
-        self.convertVariables()
-        if(self.mitStart==True):
-            self.solverGurobi = MPPRP(self.data,self.dir,self.log,{"start":True, "variables":self.variables})
-            self.solverGurobi.solver(timeLimit=timeLimit,numThreads=numThreads)
-           
-    
+
     def getResults(self):
         if(self.mitStart==True):
             return self.solverGurobi.getResults()
 
-        return self.getResultsSolverHeurisct()
-
-    def getSolution(self):
-        return self.solution
-
-    def getValueObjectiveFunction(self):
-        objExpr_1 = 0
-        for p in range(self.p):
-            for t in range(self.t):
-                objExpr_1 += self.s_p[p] * self.variables["Y"][p][t] + self.c_p[p] * self.variables["X"][p][t]
-
-        objExpr_2 = 0
-        for p in range(self.p):
-            for i in range(self.i):
-                for t in range(self.t):
-                    objExpr_2+=self.h_p_i[p][i]*self.variables["I"][p][i][t]
-
-        objExpr_3 = 0
-        for v in range(self.v):
-            for k in range(1,self.k):
-                for t in range(self.t):
-                    objExpr_3+=self.f*self.variables["Z"][v][0][k][t]
-
-        objExpr_4 = 0
-        for v in range(self.v):
-            for i in range(self.i):
-                for k in range(self.k):
-                    if(i!=k):
-                        for t in range(self.t):
-                            objExpr_4+=self.a_i_k[i][k]*self.variables["Z"][v][i][k][t]
-
-        return objExpr_1 + objExpr_2 + objExpr_3 + objExpr_4
-    """
-    Busca_Local(solucao):
-    melhora ← verdadeiro
-    
-    enquanto melhora faça:
-        melhora ← falso
-        melhor_movimento ← ∅
-        melhor_custo ← custo(solucao)
-        
-        // Explorar vizinhanças
-        Para cada cliente c ∈ C:
-            Para cada produto p ∈ P:
-                Para cada período t ∈ T:
-                    
-                    // Movimento 1: realocar produção para outro período
-                    Para cada período t2 próximo de t:
-                        nova_solucao ← mover_producao(solucao, c, p, t, t2)
-                        se viável(nova_solucao):
-                            custo ← Avaliar(nova_solucao)
-                            se custo < melhor_custo:
-                                melhor_movimento ← (c,p,t,t2)
-                                melhor_custo ← custo
-                        
-                    // Movimento 2: redistribuir entre clientes
-                    Para cada cliente c2 ≠ c:
-                        nova_solucao ← transferir_producao(solucao, c → c2, p, t)
-                        se viável(nova_solucao):
-                            custo ← Avaliar(nova_solucao)
-                            se custo < melhor_custo:
-                                melhor_movimento ← (c,c2,p,t)
-                                melhor_custo ← custo
-                                
-                    // Movimento 3: reduzir excesso de estoque
-                    se estoque[c][p][t] >> demanda[c][p][t]:
-                        nova_solucao ← reduzir_estoque(solucao, c,p,t)
-                        se viável(nova_solucao):
-                            custo ← Avaliar(nova_solucao)
-                            se custo < melhor_custo:
-                                melhor_movimento ← (reduzir,c,p,t)
-                                melhor_custo ← custo
-                                
-        // Aplicar melhor movimento encontrado
-        se melhor_movimento ≠ ∅:
-            aplicar(melhor_movimento, solucao)
-            melhora ← verdadeiro
-    
-    retornar solucao
-
-    """
-   
+        return self.getResultsSolverMetaHeurisct()

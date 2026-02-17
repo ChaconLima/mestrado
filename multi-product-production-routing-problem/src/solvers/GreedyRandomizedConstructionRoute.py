@@ -13,7 +13,6 @@
 #################################################################################################
 from typing import List
 import numpy as np
-import random
 import pdb
 from src.log.Logger import Logger
 from src.solvers.TwoOptOnRoute import TwoOptOnRoute
@@ -93,7 +92,7 @@ class GreedyRandomizedConstructionRoute:
         D: np.ndarray,
         n_vehicles: int,
         alpha: float = 0.3,
-        rng: random.Random = None,
+        rng: np.random.Generator = None,
     ) -> List[List[int]]:
         """
         Constrói uma solução factível (se possível) usando RCL:
@@ -139,6 +138,8 @@ class GreedyRandomizedConstructionRoute:
             rcl = [t for t in candidate_list if t[2] <= threshold]
             chosen = rng.choice(rcl)
             cliente, veiculo, _ = chosen
+            cliente=int(cliente)
+            veiculo=int(veiculo)
 
             # insere no final
             routes[veiculo].append(cliente)

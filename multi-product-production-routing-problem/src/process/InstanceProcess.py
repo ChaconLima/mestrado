@@ -1,14 +1,16 @@
 from src.helpers.ReadPrpFile import ReadPrpFile as RD
 from src.solvers.MultProductProdctionRoutingProblem import MultProductProdctionRoutingProblem as MPPRP
 from src.solvers.MultProductProdctionRoutingProblemGreedyConstructiveHeuristic import MultProductProdctionRoutingProblemGreedyConstructiveHeuristic as MPPRPG
+from src.solvers.MultProductProductionRoutingProblemGrasp import MultProductProductionRoutingProblemGrasp as MPPRPGRASP
 from src.log.Logger import Logger
 from src.process.ProcessResults import getResults
 from src.helpers.GraphDisplay import graphResults
+import numpy as np
 import pdb
 
 class InstanceProcess:
 
-    def __init__(self,instance,output,isPloat='false',numThreads=None,timeLimit=None,log:Logger=None,solver="GRASP"):
+    def __init__(self,instance,output,isPloat='false',numThreads=None,timeLimit=None,log:Logger=None,solver="GRASP",seed=123):
         self.instance = instance
         self.isPloat = isPloat
         self.numThreads = numThreads
@@ -17,6 +19,10 @@ class InstanceProcess:
         self.isFinished=False
         self.solver = solver
         self.log:Logger = log
+        self.seed = seed
+
+        self.log.info(f"Configurando seed para = {self.seed}")
+        self.rng = np.random.default_rng(seed=seed)     
 
     def isProcessFinished(self):
         return self.isFinished
@@ -29,13 +35,29 @@ class InstanceProcess:
             
             case "HEURISTICA_CONSTRUTIVA_MIT_START":
                 self.log.info(f" Solver: HEURISTICA_CONSTRUTIVA_MIT_START")
-                instancia = MPPRPG(map=data,dir=self.output,log=self.log)
+                instancia = MPPRPG(map=data,dir=self.output,log=self.log,rng=self.rng)
                 instancia.setMitStart(True)
+                instancia.setSeed(self.seed)
                 return instancia
             
             case "HEURISTICA_CONSTRUTIVA":
                 self.log.info(f" Solver: HEURISTICA_CONSTRUTIVA")
-                return MPPRPG(map=data,dir=self.output,log=self.log)
+                instancia = MPPRPG(map=data,dir=self.output,log=self.log,rng=self.rng)
+                instancia.setSeed(self.seed)
+                return instancia
+            
+            case "META_HEURISTICA_GRASP":
+                self.log.info(f" Solver: META_HEURISTICA_GRASP")
+                instancia = MPPRPGRASP(map=data,dir=self.output,log=self.log,rng=self.rng)
+                instancia.setSeed(self.seed)
+                return instancia
+
+            case "META_HEURISTICA_GRASP_MIT_START":
+                self.log.info(f" Solver: META_HEURISTICA_GRASP_MIT_START")
+                instancia = MPPRPGRASP(map=data,dir=self.output,log=self.log,rng=self.rng)
+                instancia.setMitStart(True)
+                instancia.setSeed(self.seed)
+                return instancia
             
             case _: 
                 print(" VALOR SETADO COMO DEFAULT ----- SEM SOLVER ")

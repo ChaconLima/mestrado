@@ -2,7 +2,8 @@
   "solver":{
     "threadsLimit":1,
     "timeLimit":1800,
-    "method":"HEURISTICA_CONSTRUTIVA_MIT_START"
+    "method":"META_HEURISTICA_GRASP",
+    "seed": 1500
   },
   "workers":{
     "num":1,

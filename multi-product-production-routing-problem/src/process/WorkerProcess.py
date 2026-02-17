@@ -23,7 +23,7 @@ class WorkerProcess:
                 self.log.info("[Supervisor] Fila vazia. Aguardando workers terminarem.")
                 break
 
-    def worker(self,worker_id,solver):
+    def worker(self,worker_id,solver,seed):
         while True:
             try:
                 task = self.taskQueue.get(timeout=2)
@@ -43,7 +43,8 @@ class WorkerProcess:
                 timeLimit=task['instancie']['timeLimit'],
                 numThreads=task['instancie']['numThreads'],
                 log=log,
-                solver=solver).process()
+                solver=solver,
+                seed=seed).process()
 
             except Exception as e:
                 log.error(f"Ocorreu um erro inesperado: {e}: stack: {traceback.format_exc()}")
@@ -52,14 +53,14 @@ class WorkerProcess:
             
             self.taskQueue.task_done()
 
-    def process(self, instancies=[], solver="DEFAULT"):
+    def process(self, instancies=[], solver="DEFAULT", seed = 123):
 
         for i in range(len(instancies)):
             self.taskQueue.put({'task': {i+1},'instancie':instancies[i]})
 
         workers = []
         for i in range(self.numWorkers):
-            t = threading.Thread(target=self.worker, args=(i+1, solver))
+            t = threading.Thread(target=self.worker, args=(i+1, solver, seed))
             t.start()
             workers.append(t)
 
