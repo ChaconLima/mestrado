@@ -88,7 +88,11 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
         solucao_t_i_p = [[[{'cliente': i,'produto': p,'periodo': t,'estoque': 0,'demanda': 0,'producaco': 0} for p in range(self.p)] for i in range(self.i)] for t in range(self.t)]
         estoque_i_p = [[self.I_p_i_0[p][i] for p in range(self.p)] for i in range(self.i)]
         capacities = [[self.C] for _ in range(self.v)]
+        demands_t = []
+        dist_t = []
         routes = []
+        points_t = []
+        candidates_soluction = []
 
         for t in range(self.t):
             capacidade_producao_restante = int(self.B)
@@ -206,13 +210,22 @@ class MultProductProdctionRoutingProblemGreedyConstructiveHeuristic:
             candidates_t = list(dict.fromkeys(candidates_t))
             dem_t = [v for v in dem_t if v]
             D = self.getDistancesInPeriod(candidates_t)
-
-            route, distance, demandas = self.greedyRoute.greedyRandomizedConstruction(candidates_t, dem_t, capacities, D, int(self.v), self.alfa, self.rng)
+           
+            route, distance, demandas, points = self.greedyRoute.greedyRandomizedConstruction(candidates_t, dem_t, capacities, D, int(self.v), self.alfa, self.rng)
             routes.append({'periodo':t ,'route':route,'distance':distance,'demandas':demandas})
+            
+            demands_t.append(dem_t)
+            dist_t.append(D)
+            points_t.append(points)
+            candidates_soluction.append(candidates_t)
 
         self.solution= {
             "production": solucao_t_i_p,
-            "routes": routes
+            "routes": routes,
+            "candidates": candidates_soluction,
+            "demands": demands_t,
+            "distancies": dist_t,
+            "points": points_t
         }
         #self.log.info(json.dumps(final_solution, indent=4))
 

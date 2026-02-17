@@ -16,6 +16,7 @@ from src.solvers.GreedyRandomizedConstructionRoute import GreedyRandomizedConstr
 from src.solvers.MultProductProdctionRoutingProblem import MultProductProdctionRoutingProblem as MPPRP
 from src.solvers.MultProductProdctionRoutingProblemGreedyConstructiveHeuristic import MultProductProdctionRoutingProblemGreedyConstructiveHeuristic as MPPRPG
 import numpy as np
+from typing import List
 
 class MultProductProductionRoutingProblemGrasp:
     def __init__(self,map,dir,log:Logger,rng:np.random.Generator):
@@ -70,23 +71,169 @@ class MultProductProductionRoutingProblemGrasp:
         self.seed = seed
 
 
+    # ==========================
+    # Busca Local: 1-Move entre rotas
+    # ==========================
+
+    def total_demanda(self, solution: List[List[int]], demands: List[List[float]], c:List[int]) -> float:
+        p_size = len(demands[0])
+        vehicles = []
+        #pdb.set_trace()
+        for v in range(len(solution)):
+            d = []
+            d_t = [0.0 for _ in range(p_size)]
+            # Somar demandas atendidas por veículo
+            for i in range(len(solution[v])):
+                client = solution[v][i]
+                d_p_i = []
+                for p in range(len(demands[client])):
+                    d_t[p] += demands[client][p]
+                    d_p_i.append(demands[client][p])
+                d.append(d_p_i)
+            
+            # Atualizar demandas restantes
+            d_e = []
+            for d_i in range(len(d)):
+                d_e_p = []
+                for p in range(len(d[d_i])):
+                    d_t[p] -= d[d_i][p]
+                    d_e_p.append({'produto':p,'restante_veiculo':d_t[p], 'qte_entregue': d[d_i][p]})
+                d_e.append({'cliente': c[v][d_i], 'produtos': d_e_p})
+
+            vehicles.append({'veiculo':v, 'entregas': d_e})
+        return vehicles
+
+    def busca_local_2opt_uma_rota(self, rota, dist):
+        melhor = rota
+        melhor_custo = self.custo_rota(melhor, dist)
+        melhorou = True
+
+        while melhorou:
+            melhorou = False
+            for i in range(len(rota) - 1):
+                for j in range(i + 2, len(rota) + 1):
+                    nova = melhor[:i] + melhor[i:j][::-1] + melhor[j:]
+                    novo_custo = self.custo_rota(nova, dist)
+                    if novo_custo < melhor_custo:
+                        melhor = nova
+                        melhor_custo = novo_custo
+                        melhorou = True
+            rota = melhor
+        return melhor
+
+    def busca_local_2opt(self,rotas, dist):
+        return [self.busca_local_2opt_uma_rota(r, dist) for r in rotas]
+
+
+    def custo_rota(self, rota, dist):
+        custo = 0
+        atual = 0  # depósito
+        for cliente in rota:
+            custo += dist[atual][cliente]
+            atual = cliente
+        custo += dist[atual][0]  # retorno ao depósito
+        return custo
+
+    def custo_total(self, rotas, dist):
+        return sum(self.custo_rota(r, dist) for r in rotas)
+    
+    def busca_local_1move(self,rotas, demandas, capacidade, dist):
+        melhorou = True
+        while melhorou:
+            melhorou = False
+            for i in range(len(rotas)):
+                for j in range(len(rotas)):
+                    if i == j:
+                        continue
+                    for ci in range(len(rotas[i])):
+                        cliente = rotas[i][ci]
+                        demanda_cliente = demandas[cliente]
+                        if sum(demandas[c] for c in rotas[j]) + demanda_cliente <= capacidade:
+                            nova_i = rotas[i][:ci] + rotas[i][ci+1:]
+                            for cj in range(len(rotas[j]) + 1):
+                                nova_j = rotas[j][:cj] + [cliente] + rotas[j][cj:]
+                                novas_rotas = rotas[:]
+                                novas_rotas[i] = nova_i
+                                novas_rotas[j] = nova_j
+                                custo_antigo = self.custo_total(rotas, dist)
+                                custo_novo = self.custo_total(novas_rotas, dist)
+                                if custo_novo < custo_antigo:
+                                    rotas = novas_rotas
+                                    melhorou = True
+                                    break
+                            if melhorou:
+                                break
+                    if melhorou:
+                        break
+                if melhorou:
+                    break
+        return rotas
+
+    def process_busca_local_entre_rotas(self,demands,points,distancies,candidates):
+        demand_product = []
+        for i in range(len(demands)):
+            demand_product.append(sum(demands[i]))
+
+        routes_opt = self.busca_local_1move(points,demand_product,self.C, distancies)
+        routes_opt = self.busca_local_2opt(routes_opt, distancies)
+
+        routes = []
+        for route in routes_opt:
+            routes.append([candidates[i] for i in route])
+
+        dist_total = self.custo_total(routes_opt,distancies), 
+        demanda_total = self.total_demanda(routes_opt,demands,routes)
+
+        return routes,dist_total[0],demanda_total,routes_opt
+
+
+    # ==========================
+    # ==========================
+    # ==========================
+
     def solver(self,numThreads=None,timeLimit=None):
 
         print("chegou aqui! seed", self.seed)
+        alpha = 0.2
+        # for alpha in np.linspace(0, 1, 111):
+        inst = MPPRPG(map=self.data,dir=self.dir,log=self.log,rng=self.rng)
+        inst.solver()
+        fo = inst.getValueObjectiveFunction()
+        solution = inst.getSolution()
+        demands = solution['demands']
+        distancies = solution['distancies']
+        points = solution['points']
+        candidates=solution['candidates']
 
-        for alpha in np.linspace(0, 1, 111):
-            inst = MPPRPG(map=self.data,dir=self.dir,log=self.log,rng=self.rng)
-            inst.solver()
-            fo = inst.getValueObjectiveFunction()
+        routes_opt = []
+        for t in range(len(solution['routes'])):
 
-            print(f"alpha: {alpha} solucao: {fo}")
-            
+            # print(f"solution rotas: {solution['routes'][t]['route']}, distancia: {float(solution['routes'][t]['distance'])}")
 
+            routes,dist_total,demanda_total,point = self.process_busca_local_entre_rotas(demands[t],points[t],distancies[t],candidates[t])
+            routes_opt.append({'periodo':t ,'route':routes,'distance':dist_total,'demandas':demanda_total})
+
+            # print(f"Novas rotas: {routes}, distancia: {dist_total} \n")
+
+
+        solution['routes'] = routes_opt
+        solution['points'] = point
+
+
+        self.solution = solution
+
+
+        self.convertVariables()
         if(self.mitStart==True):
             self.solverGurobi = MPPRP(self.data,self.dir,self.log,{"start":True, "variables":self.variables})
             self.solverGurobi.solver(timeLimit=timeLimit,numThreads=numThreads)
 
+        print(f"FO: {self.getValueObjectiveFunction()}")
 
+
+    # ==========================
+    # Conversor de dados
+    # ==========================
     def convertVariables(self):
 
         final_solution = self.solution
@@ -142,6 +289,35 @@ class MultProductProductionRoutingProblemGrasp:
         self.variables={"X":X, "Y":Y, "I":I, "Q":Q, "R":R, "Z":Z}
 
         return Z,X,Y,I,R,Q
+    
+    def getValueObjectiveFunction(self):
+        objExpr_1 = 0
+        for p in range(self.p):
+            for t in range(self.t):
+                objExpr_1 += self.s_p[p] * self.variables["Y"][p][t] + self.c_p[p] * self.variables["X"][p][t]
+
+        objExpr_2 = 0
+        for p in range(self.p):
+            for i in range(self.i):
+                for t in range(self.t):
+                    objExpr_2+=self.h_p_i[p][i]*self.variables["I"][p][i][t]
+
+        objExpr_3 = 0
+        for v in range(self.v):
+            for k in range(1,self.k):
+                for t in range(self.t):
+                    objExpr_3+=self.f*self.variables["Z"][v][0][k][t]
+
+        objExpr_4 = 0
+        for v in range(self.v):
+            for i in range(self.i):
+                for k in range(self.k):
+                    if(i!=k):
+                        for t in range(self.t):
+                            objExpr_4+=self.a_i_k[i][k]*self.variables["Z"][v][i][k][t]
+
+        return objExpr_1 + objExpr_2 + objExpr_3 + objExpr_4
+    
     def getResultsSolverHeurisct(self):
         z=self.variables["Z"]
         x=self.variables["X"]
@@ -268,9 +444,11 @@ class MultProductProductionRoutingProblemGrasp:
     
         return Z,X,Y,I,R,Q,0,0,0,0,0,0,0   
 
-
     def getResults(self):
         if(self.mitStart==True):
             return self.solverGurobi.getResults()
 
-        return self.getResultsSolverMetaHeurisct()
+        return self.getResultsSolverHeurisct()
+    # ==========================
+    # ==========================
+    # ==========================

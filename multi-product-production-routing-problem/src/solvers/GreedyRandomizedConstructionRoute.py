@@ -159,4 +159,4 @@ class GreedyRandomizedConstructionRoute:
 
         #c = [[clients[i] for i in route] for route in routes]
 
-        return c, self.total_cost(routes_op,D), self.total_demanda(routes_op,demands,c)
+        return c, self.total_cost(routes_op,D), self.total_demanda(routes_op,demands,c), routes_op
